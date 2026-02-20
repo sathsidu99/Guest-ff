@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "description": "KNX Account Generator Web Interface",
   "scripts": {
-    "dev": "netlify dev"
+    "dev": "netlify dev",
+    "build": "echo 'No build required'"
   },
   "dependencies": {
-    "axios": "^1.6.0"
+    "python-shell": "^5.0.0"
   },
   "devDependencies": {
     "@netlify/functions": "^2.4.0",
