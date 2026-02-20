@@ -1478,4 +1478,50 @@ if __name__ == "__main__":
     except Exception as e:
         print_error(f"Error: {e}")
         time.sleep(2)
+
         os.execv(sys.executable, [sys.executable] + sys.argv)
+
+
+# Add this at the end of your V7ACC.py file
+if __name__ == "__main__":
+    import sys
+    import json
+    
+    if len(sys.argv) > 1:
+        config = json.loads(sys.argv[1])
+        
+        # Extract config
+        region = config.get('region', 'IND')
+        is_ghost = (region == 'GHOST')
+        if is_ghost:
+            region = 'BR'
+            
+        account_name = config.get('name_prefix', 'KNX')
+        password_prefix = config.get('password_prefix', 'KNX')
+        account_count = int(config.get('account_count', 100))
+        thread_count = int(config.get('thread_count', 5))
+        
+        # Set global variables
+        global AUTO_ACTIVATION_ENABLED, RARITY_SCORE_THRESHOLD, TARGET_ACCOUNTS
+        AUTO_ACTIVATION_ENABLED = config.get('auto_activation', True)
+        RARITY_SCORE_THRESHOLD = int(config.get('rarity_threshold', 4))
+        TARGET_ACCOUNTS = account_count
+        
+        # Create folders
+        setup_all_folders()
+        
+        # Start generation
+        print(f"🚀 Starting generation with {thread_count} threads...")
+        
+        threads = []
+        for i in range(thread_count):
+            t = threading.Thread(target=worker, args=(region, account_name, password_prefix, account_count, i+1, is_ghost))
+            t.daemon = True
+            t.start()
+            threads.append(t)
+        
+        # Wait for completion
+        for t in threads:
+            t.join()
+        
+        print("✅ Generation completed!")
