@@ -1,237 +1,387 @@
-const { exec } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const { PythonShell } = require('python-shell');
+// API Configuration
+const API_BASE = '/.netlify/functions/generator';
 
-// Store generator state
-let generatorProcess = null;
-let logs = [];
+// State
+let isGenerating = false;
+let currentTab = 'all';
 let stats = {
     generated: 0,
-    target: 0,
+    target: 100,
     rare: 0,
     couples: 0,
     activated: 0,
     failed: 0,
-    speed: 0,
-    is_running: false
+    speed: 0
 };
+let accounts = {
+    all: [],
+    rare: [],
+    couples: [],
+    activated: []
+};
+let pollingInterval = null;
 
-// PythonShell options
-const getPythonOptions = (config) => ({
-    mode: 'text',
-    pythonPath: 'python3',
-    pythonOptions: ['-u'], // unbuffered output
-    scriptPath: __dirname,
-    args: [JSON.stringify(config)],
-    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    createParticles();
+    loadInitialData();
+    startPolling();
+    loadAccounts();
 });
 
-exports.handler = async (event, context) => {
-    // Handle CORS
-    const headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Content-Type': 'application/json'
+// Create particle background
+function createParticles() {
+    const particles = document.querySelector('.particles');
+    for (let i = 0; i < 50; i++) {
+        const particle = document.createElement('div');
+        particle.style.cssText = `
+            position: absolute;
+            width: ${Math.random() * 3}px;
+            height: ${Math.random() * 3}px;
+            background: rgba(255, 255, 255, ${Math.random() * 0.3});
+            border-radius: 50%;
+            top: ${Math.random() * 100}%;
+            left: ${Math.random() * 100}%;
+            animation: float ${5 + Math.random() * 10}s linear infinite;
+            pointer-events: none;
+        `;
+        particles.appendChild(particle);
+    }
+}
+
+// Animation keyframes
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes float {
+        0% { transform: translateY(0) translateX(0); }
+        100% { transform: translateY(-100vh) translateX(${Math.random() * 100 - 50}px); }
+    }
+`;
+document.head.appendChild(style);
+
+// Load initial data
+function loadInitialData() {
+    addLog('KNX Generator v7.1 Netlify Edition', 'info');
+    addLog('Configure settings and click "Start Generation" to begin', 'info');
+    updateStats();
+}
+
+// Start generation
+async function startGeneration() {
+    const config = {
+        region: document.getElementById('region').value,
+        name_prefix: document.getElementById('name-prefix').value || 'KNX',
+        password_prefix: document.getElementById('password-prefix').value || 'KNX',
+        account_count: parseInt(document.getElementById('account-count').value) || 100,
+        thread_count: parseInt(document.getElementById('thread-count').value) || 5,
+        rarity_threshold: parseInt(document.getElementById('rarity-threshold').value) || 4,
+        auto_activation: document.getElementById('auto-activation').checked,
+        turbo_mode: document.getElementById('turbo-mode').checked
     };
 
-    if (event.httpMethod === 'OPTIONS') {
-        return { statusCode: 200, headers, body: '' };
-    }
+    // Update target
+    stats.target = config.account_count;
+    updateStats();
 
-    // GET requests (polling)
-    if (event.httpMethod === 'GET') {
-        const { action } = event.queryStringParameters || {};
+    // Disable start button, enable stop button
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('stopBtn').disabled = false;
+    isGenerating = true;
+
+    addLog(`🚀 Starting generation...`, 'info');
+    addLog(`📍 Region: ${config.region}`, 'info');
+    addLog(`🎯 Target: ${config.account_count} accounts`, 'info');
+    addLog(`⚡ Threads: ${config.thread_count}`, 'info');
+    addLog(`🔥 Auto-activation: ${config.auto_activation ? 'ON' : 'OFF'}`, 'info');
+
+    try {
+        const response = await fetch(`${API_BASE}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'start', config })
+        });
         
-        switch(action) {
-            case 'stats':
-                return {
-                    statusCode: 200,
-                    headers,
-                    body: JSON.stringify(stats)
-                };
-                
-            case 'logs':
-                return {
-                    statusCode: 200,
-                    headers,
-                    body: JSON.stringify(logs.slice(-50)) // Last 50 logs
-                };
-                
-            case 'accounts':
-                const { tab } = event.queryStringParameters;
-                let accounts = [];
-                
-                // Read accounts from files
-                try {
-                    const basePath = path.join(__dirname, '..', '..', 'KNX');
-                    
-                    if (fs.existsSync(basePath)) {
-                        const folderMap = {
-                            'all': 'ACCOUNTS',
-                            'rare': 'RARE_ACCOUNTS',
-                            'couples': 'COUPLES_ACCOUNTS',
-                            'activated': 'ACTIVATED'
-                        };
-                        
-                        const folder = folderMap[tab];
-                        if (folder) {
-                            const folderPath = path.join(basePath, folder);
-                            if (fs.existsSync(folderPath)) {
-                                const files = fs.readdirSync(folderPath);
-                                for (const file of files) {
-                                    if (file.endsWith('.json')) {
-                                        const data = JSON.parse(fs.readFileSync(path.join(folderPath, file), 'utf8'));
-                                        accounts = accounts.concat(data.slice(0, 50));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error reading accounts:', error);
-                }
-                
-                return {
-                    statusCode: 200,
-                    headers,
-                    body: JSON.stringify(accounts.slice(0, 100))
-                };
-                
-            default:
-                return {
-                    statusCode: 400,
-                    headers,
-                    body: JSON.stringify({ error: 'Invalid action' })
-                };
+        const data = await response.json();
+        if (data.status === 'success') {
+            addLog('✅ Generator started successfully', 'success');
+            startPolling();
+        } else {
+            addLog('❌ Failed to start generator', 'error');
         }
+    } catch (error) {
+        addLog(`❌ Error: ${error.message}`, 'error');
+        stopGeneration();
     }
-
-    // POST requests (control)
-    if (event.httpMethod === 'POST') {
-        const { action, config } = JSON.parse(event.body);
-
-        if (action === 'start') {
-            if (generatorProcess) {
-                return {
-                    statusCode: 400,
-                    headers,
-                    body: JSON.stringify({ error: 'Generator already running' })
-                };
-            }
-
-            stats.target = config.account_count;
-            stats.is_running = true;
-            
-            // Start Python process
-            const options = getPythonOptions(config);
-            
-            generatorProcess = new PythonShell('V7ACC.py', options);
-            
-            generatorProcess.on('message', (message) => {
-                // Parse message and update stats
-                logs.push({
-                    message,
-                    timestamp: new Date().toISOString(),
-                    type: getLogType(message)
-                });
-                
-                // Update stats from log messages
-                updateStatsFromLog(message);
-            });
-            
-            generatorProcess.on('stderr', (stderr) => {
-                logs.push({
-                    message: stderr,
-                    timestamp: new Date().toISOString(),
-                    type: 'error'
-                });
-            });
-            
-            generatorProcess.on('close', () => {
-                generatorProcess = null;
-                stats.is_running = false;
-                logs.push({
-                    message: 'Generator process finished',
-                    timestamp: new Date().toISOString(),
-                    type: 'info'
-                });
-            });
-
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify({ status: 'success', message: 'Generator started' })
-            };
-        }
-
-        if (action === 'stop') {
-            if (generatorProcess) {
-                generatorProcess.kill();
-                generatorProcess = null;
-                stats.is_running = false;
-            }
-            
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify({ status: 'success', message: 'Generator stopped' })
-            };
-        }
-    }
-
-    return {
-        statusCode: 405,
-        headers,
-        body: JSON.stringify({ error: 'Method not allowed' })
-    };
-};
-
-// Helper function to determine log type
-function getLogType(message) {
-    if (message.includes('✅') || message.includes('success')) return 'success';
-    if (message.includes('❌') || message.includes('error')) return 'error';
-    if (message.includes('⚠️') || message.includes('warning')) return 'warning';
-    if (message.includes('💎') || message.includes('rare')) return 'rare';
-    if (message.includes('💑') || message.includes('couple')) return 'couple';
-    if (message.includes('🔥') || message.includes('activate')) return 'activation';
-    return 'info';
 }
 
-// Helper function to update stats from logs
-function updateStatsFromLog(message) {
-    // Update generated count
-    const genMatch = message.match(/Registration (\d+)\/(\d+)/);
-    if (genMatch) {
-        stats.generated = parseInt(genMatch[1]);
-        stats.target = parseInt(genMatch[2]);
+// Stop generation
+async function stopGeneration() {
+    try {
+        await fetch(`${API_BASE}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'stop' })
+        });
+    } catch (error) {
+        console.error('Stop error:', error);
     }
+
+    isGenerating = false;
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = true;
+    addLog('⏹️ Generation stopped', 'warning');
+}
+
+// Start polling for updates
+function startPolling() {
+    if (pollingInterval) clearInterval(pollingInterval);
     
-    // Update rare count
-    if (message.includes('RARE ACCOUNT FOUND')) {
-        stats.rare++;
-    }
-    
-    // Update couples count
-    if (message.includes('COUPLES ACCOUNT FOUND')) {
-        stats.couples++;
-    }
-    
-    // Update activated count
-    const actMatch = message.match(/Activated! Total: (\d+)/);
-    if (actMatch) {
-        stats.activated = parseInt(actMatch[1]);
-    }
-    
-    // Update failed count
-    const failMatch = message.match(/Failed! Total failed: (\d+)/);
-    if (failMatch) {
-        stats.failed = parseInt(failMatch[1]);
-    }
-    
-    // Limit logs size
-    if (logs.length > 1000) {
-        logs = logs.slice(-500);
+    pollingInterval = setInterval(async () => {
+        await fetchStats();
+        await fetchLogs();
+    }, 2000);
+}
+
+// Fetch stats
+async function fetchStats() {
+    try {
+        const response = await fetch(`${API_BASE}?action=stats`);
+        const newStats = await response.json();
+        
+        stats = { ...stats, ...newStats };
+        updateStats();
+        
+        // Update progress bar
+        const progress = stats.target > 0 ? (stats.generated / stats.target) * 100 : 0;
+        document.getElementById('progressBar').style.width = `${progress}%`;
+        document.getElementById('progressPercent').textContent = `${Math.round(progress)}%`;
+        document.getElementById('progressCount').textContent = `${stats.generated}/${stats.target}`;
+        
+        // Update badges
+        document.getElementById('rare-badge').textContent = stats.rare;
+        document.getElementById('couples-badge').textContent = stats.couples;
+        document.getElementById('activated-badge').textContent = stats.activated;
+        
+    } catch (error) {
+        console.error('Stats fetch error:', error);
     }
 }
+
+// Fetch logs
+async function fetchLogs() {
+    try {
+        const response = await fetch(`${API_BASE}?action=logs`);
+        const logs = await response.json();
+        
+        logs.forEach(log => {
+            if (log.message && log.message.trim()) {
+                addLog(log.message, log.type || 'info');
+            }
+        });
+    } catch (error) {
+        console.error('Logs fetch error:', error);
+    }
+}
+
+// Load accounts
+async function loadAccounts() {
+    try {
+        const response = await fetch(`${API_BASE}?action=accounts&tab=${currentTab}`);
+        accounts[currentTab] = await response.json();
+        displayAccounts();
+    } catch (error) {
+        console.error('Accounts fetch error:', error);
+    }
+}
+
+// Display accounts
+function displayAccounts() {
+    const grid = document.getElementById('accountsGrid');
+    const accountList = accounts[currentTab] || [];
+    
+    if (accountList.length === 0) {
+        grid.innerHTML = `<div class="no-accounts">No ${currentTab} accounts found</div>`;
+        return;
+    }
+    
+    grid.innerHTML = accountList.map(acc => `
+        <div class="account-card ${acc.type || currentTab}">
+            <div class="account-uid">${acc.uid || 'N/A'}</div>
+            <div class="account-details">
+                <div><i class="fas fa-user"></i> ${acc.name || 'N/A'}</div>
+                <div><i class="fas fa-id-card"></i> ${acc.account_id || 'N/A'}</div>
+                <div><i class="fas fa-key"></i> ${acc.password || 'N/A'}</div>
+                <div><i class="fas fa-globe"></i> ${acc.region || 'N/A'}</div>
+            </div>
+            <div class="account-actions">
+                <button class="copy-btn" onclick="copyAccount('${JSON.stringify(acc).replace(/'/g, "\\'")}')">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+                <button class="view-btn" onclick="viewAccount('${acc.uid}')">
+                    <i class="fas fa-eye"></i> View
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Update stats display
+function updateStats() {
+    document.getElementById('stat-generated').textContent = stats.generated;
+    document.getElementById('stat-target').textContent = `Target: ${stats.target}`;
+    document.getElementById('stat-rare').text-content = stats.rare;
+    document.getElementById('stat-couples').textContent = stats.couples;
+    document.getElementById('stat-activated').textContent = stats.activated;
+    document.getElementById('stat-failed').textContent = stats.failed;
+    document.getElementById('stat-speed').textContent = `${stats.speed}/s`;
+}
+
+// Add log entry
+function addLog(message, type = 'info') {
+    const logContainer = document.getElementById('logContainer');
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry ${type}`;
+    
+    const timestamp = new Date().toLocaleTimeString();
+    logEntry.innerHTML = `
+        <span class="log-time">[${timestamp}]</span>
+        <span class="log-message">${message}</span>
+    `;
+    
+    logContainer.appendChild(logEntry);
+    logContainer.scrollTop = logContainer.scrollHeight;
+    
+    // Keep only last 100 logs
+    while (logContainer.children.length > 100) {
+        logContainer.removeChild(logContainer.firstChild);
+    }
+}
+
+// Clear logs
+function clearLogs() {
+    document.getElementById('logContainer').innerHTML = `
+        <div class="log-entry info">
+            <span class="log-time">[SYSTEM]</span>
+            <span class="log-message">Logs cleared</span>
+        </div>
+    `;
+}
+
+// Download logs
+function downloadLogs() {
+    const logs = [];
+    document.querySelectorAll('#logContainer .log-entry').forEach(entry => {
+        const time = entry.querySelector('.log-time')?.textContent || '';
+        const message = entry.querySelector('.log-message')?.textContent || '';
+        logs.push(`${time} ${message}`);
+    });
+    
+    const blob = new Blob([logs.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `knx_logs_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.txt`;
+    a.click();
+}
+
+// Switch tab
+function switchTab(tab) {
+    currentTab = tab;
+    
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    loadAccounts();
+}
+
+// Refresh accounts
+function refreshAccounts() {
+    loadAccounts();
+    addLog('🔄 Accounts refreshed', 'info');
+}
+
+// Download current tab
+function downloadCurrentTab() {
+    const data = accounts[currentTab] || [];
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `knx_${currentTab}_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.json`;
+    a.click();
+}
+
+// Search accounts
+function searchAccounts() {
+    const searchTerm = document.getElementById('searchAccounts').value.toLowerCase();
+    const filtered = accounts[currentTab].filter(acc => 
+        JSON.stringify(acc).toLowerCase().includes(searchTerm)
+    );
+    
+    displayFilteredAccounts(filtered);
+}
+
+// Display filtered accounts
+function displayFilteredAccounts(filtered) {
+    const grid = document.getElementById('accountsGrid');
+    
+    if (filtered.length === 0) {
+        grid.innerHTML = '<div class="no-accounts">No matching accounts</div>';
+        return;
+    }
+    
+    grid.innerHTML = filtered.map(acc => `
+        <div class="account-card ${acc.type || currentTab}">
+            <div class="account-uid">${acc.uid || 'N/A'}</div>
+            <div class="account-details">
+                <div><i class="fas fa-user"></i> ${acc.name || 'N/A'}</div>
+                <div><i class="fas fa-id-card"></i> ${acc.account_id || 'N/A'}</div>
+                <div><i class="fas fa-key"></i> ${acc.password || 'N/A'}</div>
+                <div><i class="fas fa-globe"></i> ${acc.region || 'N/A'}</div>
+            </div>
+            <div class="account-actions">
+                <button class="copy-btn" onclick="copyAccount('${JSON.stringify(acc).replace(/'/g, "\\'")}')">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+                <button class="view-btn" onclick="viewAccount('${acc.uid}')">
+                    <i class="fas fa-eye"></i> View
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Copy account
+function copyAccount(accountJson) {
+    const account = JSON.parse(accountJson);
+    const text = `
+UID: ${account.uid}
+Password: ${account.password}
+Account ID: ${account.account_id || 'N/A'}
+Name: ${account.name}
+Region: ${account.region}
+    `.trim();
+    
+    navigator.clipboard.writeText(text).then(() => {
+        addLog('✅ Account copied to clipboard', 'success');
+    }).catch(() => {
+        addLog('❌ Failed to copy', 'error');
+    });
+}
+
+// View account
+function viewAccount(uid) {
+    const account = accounts[currentTab].find(a => a.uid === uid);
+    if (account) {
+        alert(JSON.stringify(account, null, 2));
+    }
+}
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+    }
+});
