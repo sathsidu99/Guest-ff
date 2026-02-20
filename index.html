@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KNX Generator v7.1 - Netlify</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Particle Background -->
+    <div class="particles"></div>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Header -->
+        <header class="header glass">
+            <div class="logo-container">
+                <h1><span class="gradient-text">KNX</span> Generator v7.1</h1>
+                <div class="badge">Netlify Edition</div>
+            </div>
+            <p class="subtitle">All-In-One Account Generator + Auto Activator</p>
+            <div class="status-badge" id="connectionStatus">
+                <i class="fas fa-circle"></i> Connected
+            </div>
+        </header>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card glass generated">
+                <div class="stat-icon"><i class="fas fa-users"></i></div>
+                <div class="stat-label">Generated</div>
+                <div class="stat-value" id="stat-generated">0</div>
+                <div class="stat-target" id="stat-target">Target: 0</div>
+                <div class="stat-speed" id="stat-speed">0/s</div>
+            </div>
+            
+            <div class="stat-card glass rare">
+                <div class="stat-icon"><i class="fas fa-gem"></i></div>
+                <div class="stat-label">Rare</div>
+                <div class="stat-value" id="stat-rare">0</div>
+            </div>
+            
+            <div class="stat-card glass couples">
+                <div class="stat-icon"><i class="fas fa-heart"></i></div>
+                <div class="stat-label">Couples</div>
+                <div class="stat-value" id="stat-couples">0</div>
+            </div>
+            
+            <div class="stat-card glass activated">
+                <div class="stat-icon"><i class="fas fa-bolt"></i></div>
+                <div class="stat-label">Activated</div>
+                <div class="stat-value" id="stat-activated">0</div>
+            </div>
+            
+            <div class="stat-card glass failed">
+                <div class="stat-icon"><i class="fas fa-times"></i></div>
+                <div class="stat-label">Failed</div>
+                <div class="stat-value" id="stat-failed">0</div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Control Panel -->
+            <div class="control-panel glass">
+                <h2><i class="fas fa-sliders-h"></i> Control Panel</h2>
+                
+                <div class="form-group">
+                    <label><i class="fas fa-globe"></i> Region</label>
+                    <select id="region" class="glass-input">
+                        <option value="IND">🇮🇳 IND (Hindi)</option>
+                        <option value="BD">🇧🇩 BD (Bengali)</option>
+                        <option value="PK">🇵🇰 PK (Urdu)</option>
+                        <option value="ID">🇮🇩 ID (Indonesian)</option>
+                        <option value="TH">🇹🇭 TH (Thai)</option>
+                        <option value="VN">🇻🇳 VN (Vietnamese)</option>
+                        <option value="ME">🇦🇪 ME (Arabic)</option>
+                        <option value="CIS">🇷🇺 CIS (Russian)</option>
+                        <option value="SAC">🇪🇸 SAC (Spanish)</option>
+                        <option value="GHOST">👻 GHOST Mode</option>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group half">
+                        <label><i class="fas fa-tag"></i> Name Prefix</label>
+                        <input type="text" id="name-prefix" value="KNX" class="glass-input">
+                    </div>
+                    <div class="form-group half">
+                        <label><i class="fas fa-key"></i> Password Prefix</label>
+                        <input type="text" id="password-prefix" value="KNX" class="glass-input">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group half">
+                        <label><i class="fas fa-calculator"></i> Account Count</label>
+                        <input type="number" id="account-count" value="100" min="1" max="10000" class="glass-input">
+                    </div>
+                    <div class="form-group half">
+                        <label><i class="fas fa-tachometer-alt"></i> Threads</label>
+                        <input type="number" id="thread-count" value="5" min="1" max="20" class="glass-input">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-star"></i> Rarity Threshold</label>
+                    <input type="number" id="rarity-threshold" value="4" min="1" max="10" class="glass-input">
+                </div>
+
+                <div class="form-group checkbox">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="auto-activation" checked>
+                        <span class="checkmark"></span>
+                        Enable Auto-Activation
+                    </label>
+                </div>
+
+                <div class="form-group checkbox">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="turbo-mode" checked>
+                        <span class="checkmark"></span>
+                        Turbo Mode
+                    </label>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn primary" onclick="startGeneration()" id="startBtn">
+                        <i class="fas fa-play"></i> Start Generation
+                    </button>
+                    <button class="btn danger" onclick="stopGeneration()" id="stopBtn" disabled>
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
+                </div>
+
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressBar" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-stats">
+                        <span id="progressPercent">0%</span>
+                        <span id="progressCount">0/0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Logs -->
+            <div class="log-panel glass">
+                <h2><i class="fas fa-terminal"></i> Live Logs</h2>
+                <div class="log-container" id="logContainer">
+                    <div class="log-entry info">
+                        <span class="log-time">[SYSTEM]</span>
+                        <span class="log-message">Ready to start generation...</span>
+                    </div>
+                </div>
+                <div class="log-controls">
+                    <button class="btn small" onclick="clearLogs()"><i class="fas fa-trash"></i> Clear</button>
+                    <button class="btn small" onclick="downloadLogs()"><i class="fas fa-download"></i> Download</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Accounts Section -->
+        <div class="accounts-section glass">
+            <div class="accounts-header">
+                <h2><i class="fas fa-database"></i> Generated Accounts</h2>
+                <div class="tab-buttons">
+                    <button class="tab-btn active" onclick="switchTab('all')">All</button>
+                    <button class="tab-btn" onclick="switchTab('rare')">Rare <span class="badge" id="rare-badge">0</span></button>
+                    <button class="tab-btn" onclick="switchTab('couples')">Couples <span class="badge" id="couples-badge">0</span></button>
+                    <button class="tab-btn" onclick="switchTab('activated')">Activated <span class="badge" id="activated-badge">0</span></button>
+                </div>
+            </div>
+            
+            <div class="accounts-toolbar">
+                <button class="btn small" onclick="refreshAccounts()"><i class="fas fa-sync-alt"></i> Refresh</button>
+                <button class="btn small" onclick="downloadCurrentTab()"><i class="fas fa-download"></i> Download</button>
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Search accounts..." id="searchAccounts" onkeyup="searchAccounts()">
+                </div>
+            </div>
+
+            <div class="accounts-grid" id="accountsGrid">
+                <!-- Accounts will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
